@@ -78,6 +78,7 @@ Implemented in this repo:
 
 1. Preferred path: Airtable direct upload endpoint  
    `POST https://content.airtable.com/v0/{baseId}/{recordId}/{attachmentField}/uploadAttachment`
+   After upload, the workflow normalizes the attachment field to keep only the latest ICS file.
 
 2. Fallback path (if direct upload fails):  
    upload the ICS as a GitHub Release asset (tag: `airtable-ics-assets` by default), then write the asset URL into the Airtable attachment field.

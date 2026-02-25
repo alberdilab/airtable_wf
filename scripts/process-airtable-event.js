@@ -417,6 +417,70 @@ async function uploadAttachmentToAirtable({
   });
 }
 
+function normalizeAttachmentForPatch(attachment, fallbackFilename) {
+  if (!attachment || typeof attachment !== "object") {
+    return null;
+  }
+
+  const attachmentId = nonEmptyString(attachment.id);
+  if (attachmentId) {
+    return { id: attachmentId };
+  }
+
+  const attachmentUrl = nonEmptyString(attachment.url);
+  if (!attachmentUrl) {
+    return null;
+  }
+
+  const normalized = { url: attachmentUrl };
+  const filename = nonEmptyString(attachment.filename) || fallbackFilename;
+  if (filename) {
+    normalized.filename = filename;
+  }
+  return normalized;
+}
+
+function extractLatestAttachmentFromUploadResponse(response, attachmentField, fallbackFilename) {
+  const candidates = [];
+
+  if (response && typeof response === "object") {
+    if (
+      response.fields &&
+      typeof response.fields === "object" &&
+      Array.isArray(response.fields[attachmentField])
+    ) {
+      candidates.push(...response.fields[attachmentField]);
+    }
+
+    if (Array.isArray(response[attachmentField])) {
+      candidates.push(...response[attachmentField]);
+    }
+
+    if (Array.isArray(response.attachments)) {
+      candidates.push(...response.attachments);
+    }
+
+    if (response.attachment && typeof response.attachment === "object") {
+      candidates.push(response.attachment);
+    }
+
+    if (Array.isArray(response)) {
+      candidates.push(...response);
+    }
+
+    candidates.push(response);
+  }
+
+  for (let i = candidates.length - 1; i >= 0; i -= 1) {
+    const normalized = normalizeAttachmentForPatch(candidates[i], fallbackFilename);
+    if (normalized) {
+      return normalized;
+    }
+  }
+
+  return null;
+}
+
 async function getOrCreateGithubRelease({ token, repo, apiUrl, tag }) {
   const byTag = await fetchGithub(
     `${apiUrl}/repos/${repo}/releases/tags/${encodeURIComponent(tag)}`,
@@ -514,7 +578,7 @@ async function attachIcsWithFallback({
   icsBuffer,
 }) {
   try {
-    await uploadAttachmentToAirtable({
+    const uploadResponse = await uploadAttachmentToAirtable({
       airtableToken,
       baseId,
       recordId,
@@ -522,6 +586,51 @@ async function attachIcsWithFallback({
       filename,
       icsBuffer,
     });
+
+    let latestAttachment = extractLatestAttachmentFromUploadResponse(
+      uploadResponse,
+      attachmentField,
+      filename
+    );
+
+    if (!latestAttachment) {
+      const refreshed = await fetchAirtableRecord({
+        airtableToken,
+        baseId,
+        tableIdOrName,
+        recordId,
+      });
+      const existingAttachments =
+        refreshed &&
+        refreshed.fields &&
+        Array.isArray(refreshed.fields[attachmentField])
+          ? refreshed.fields[attachmentField]
+          : [];
+
+      if (existingAttachments.length > 0) {
+        latestAttachment = normalizeAttachmentForPatch(
+          existingAttachments[existingAttachments.length - 1],
+          filename
+        );
+      }
+    }
+
+    if (!latestAttachment) {
+      throw new Error(
+        `Direct Airtable upload succeeded but could not resolve attachment for field "${attachmentField}".`
+      );
+    }
+
+    await updateAirtableRecord({
+      airtableToken,
+      baseId,
+      tableIdOrName,
+      recordId,
+      fields: {
+        [attachmentField]: [latestAttachment],
+      },
+    });
+
     return { method: "airtable_upload_attachment" };
   } catch (error) {
     console.warn(`Direct Airtable upload failed, trying URL fallback. Reason: ${error.message}`);
