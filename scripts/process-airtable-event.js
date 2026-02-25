@@ -346,6 +346,54 @@ async function updateAirtableRecord({ airtableToken, baseId, tableIdOrName, reco
   });
 }
 
+function isInvalidValueForColumnError(error) {
+  const message = error && error.message ? String(error.message) : "";
+  return message.includes("INVALID_VALUE_FOR_COLUMN");
+}
+
+async function updateAirtableTimestampField({
+  airtableToken,
+  baseId,
+  tableIdOrName,
+  recordId,
+  updatedAtField,
+}) {
+  const now = new Date();
+  const candidateValues = [now.toISOString(), now.toISOString().slice(0, 10)];
+  let lastInvalidValueError = null;
+
+  for (const candidateValue of candidateValues) {
+    try {
+      await updateAirtableRecord({
+        airtableToken,
+        baseId,
+        tableIdOrName,
+        recordId,
+        fields: {
+          [updatedAtField]: candidateValue,
+        },
+      });
+      return candidateValue;
+    } catch (error) {
+      if (isInvalidValueForColumnError(error)) {
+        lastInvalidValueError = error;
+        continue;
+      }
+      throw error;
+    }
+  }
+
+  const detail =
+    lastInvalidValueError && lastInvalidValueError.message
+      ? ` Original error: ${lastInvalidValueError.message}`
+      : "";
+  throw new Error(
+    `Field "${updatedAtField}" rejected both datetime and date values. ` +
+      `Use an editable date/date-time or text field for updatedAtField.` +
+      detail
+  );
+}
+
 async function uploadAttachmentToAirtable({
   airtableToken,
   baseId,
@@ -584,15 +632,12 @@ async function main() {
     icsBuffer,
   });
 
-  const updatedAt = new Date().toISOString();
-  await updateAirtableRecord({
+  const updatedAt = await updateAirtableTimestampField({
     airtableToken,
     baseId,
     tableIdOrName,
     recordId,
-    fields: {
-      [updatedAtField]: updatedAt,
-    },
+    updatedAtField,
   });
 
   console.log(`ICS written to: ${tmpPath}`);

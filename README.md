@@ -22,7 +22,7 @@ Use these field names in your table:
 - `Location` (optional)
 - `Description` (optional)
 - `ICS` (attachment field)
-- `ICS Updated At` (date/time)
+- `ICS Updated At` (editable date/date-time or text; not formula/lookup)
 
 ## Repository config file
 
