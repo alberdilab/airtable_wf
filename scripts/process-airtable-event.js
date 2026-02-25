@@ -136,6 +136,12 @@ function resolveAirtableConfig(payload) {
   const attachmentField = pickString(selected, ["icsField", "attachmentField", "airtableIcsField"]);
   const updatedAtField = pickString(selected, ["updatedAtField", "airtableUpdatedAtField"]);
   const releaseTag = pickString(selected, ["releaseTag"]) || "airtable-ics-assets";
+  const eventNameField =
+    pickString(selected, ["eventNameField", "summaryField", "titleField"]) || FIELD_EVENT_NAME;
+  const startField = pickString(selected, ["startField"]) || FIELD_START;
+  const endField = pickString(selected, ["endField"]) || FIELD_END;
+  const locationField = pickString(selected, ["locationField"]) || FIELD_LOCATION;
+  const descriptionField = pickString(selected, ["descriptionField"]) || FIELD_DESCRIPTION;
 
   if (!baseId) {
     throw new Error(`Missing baseId for automationKey "${automationKey}" in ${configPath}.`);
@@ -164,6 +170,11 @@ function resolveAirtableConfig(payload) {
     attachmentField,
     updatedAtField,
     releaseTag,
+    eventNameField,
+    startField,
+    endField,
+    locationField,
+    descriptionField,
   };
 }
 
@@ -513,6 +524,11 @@ async function main() {
     attachmentField,
     updatedAtField,
     releaseTag,
+    eventNameField,
+    startField,
+    endField,
+    locationField,
+    descriptionField,
   } = config;
 
   console.log(`Event payload file: ${eventPath}`);
@@ -526,19 +542,22 @@ async function main() {
   const record = await fetchAirtableRecord({ airtableToken, baseId, tableIdOrName, recordId });
   const fields = record && typeof record.fields === "object" && record.fields ? record.fields : {};
 
-  const eventName = normalizeText(fields[FIELD_EVENT_NAME]).trim();
+  const eventName = normalizeText(fields[eventNameField]).trim();
   if (!eventName) {
-    throw new Error(`Missing required Airtable field: ${FIELD_EVENT_NAME}`);
+    const availableFields = Object.keys(fields).sort().join(", ");
+    throw new Error(
+      `Missing required Airtable field: ${eventNameField}. Available fields: ${availableFields}`
+    );
   }
 
-  const startDate = parseDate(fields[FIELD_START], FIELD_START);
-  const endDate = parseDate(fields[FIELD_END], FIELD_END);
+  const startDate = parseDate(fields[startField], startField);
+  const endDate = parseDate(fields[endField], endField);
   if (endDate <= startDate) {
-    throw new Error(`Invalid event range: "${FIELD_END}" must be after "${FIELD_START}"`);
+    throw new Error(`Invalid event range: "${endField}" must be after "${startField}"`);
   }
 
-  const location = normalizeText(fields[FIELD_LOCATION]).trim();
-  const description = normalizeText(fields[FIELD_DESCRIPTION]).trim();
+  const location = normalizeText(fields[locationField]).trim();
+  const description = normalizeText(fields[descriptionField]).trim();
 
   const icsText = buildIcs({
     recordId,

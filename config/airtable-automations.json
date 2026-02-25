@@ -2,6 +2,7 @@
   "ehi_events": {
     "baseId": "app7iuOBWYTEUH7Ma",
     "tableName": "Events",
+    "eventNameField": "Name",
     "icsField": "ICS",
     "updatedAtField": "ICS_update",
     "releaseTag": "airtable-ics-assets_ehi"
@@ -9,6 +10,7 @@
   "alberdilab_events": {
     "baseId": "appllrMDEaqNYheLX",
     "tableName": "Events",
+    "eventNameField": "Name",
     "icsField": "ICS",
     "updatedAtField": "ICS_update",
     "releaseTag": "airtable-ics-assets_alberdilab"

@@ -56,6 +56,11 @@ Per-automation keys:
 - `icsField` (required)
 - `updatedAtField` (required)
 - `releaseTag` (optional, default: `airtable-ics-assets`)
+- `eventNameField` (optional, default: `Event Name`)
+- `startField` (optional, default: `Start`)
+- `endField` (optional, default: `End`)
+- `locationField` (optional, default: `Location`)
+- `descriptionField` (optional, default: `Description`)
 
 Dispatch payload:
 
