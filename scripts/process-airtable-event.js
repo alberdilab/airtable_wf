@@ -24,6 +24,21 @@ function optionalEnv(name) {
   return value && value.trim() ? value.trim() : "";
 }
 
+function readJsonFile(filePath) {
+  let raw;
+  try {
+    raw = fs.readFileSync(filePath, "utf8");
+  } catch (error) {
+    throw new Error(`Failed to read JSON file at ${filePath}: ${error.message}`);
+  }
+
+  try {
+    return JSON.parse(raw);
+  } catch (error) {
+    throw new Error(`Invalid JSON in ${filePath}: ${error.message}`);
+  }
+}
+
 function readDispatchPayload() {
   const eventPath = process.env.GITHUB_EVENT_PATH || process.argv[2];
   if (!eventPath) {
@@ -71,24 +86,23 @@ function pickString(obj, keys) {
   return "";
 }
 
-function parseAutomationConfigMap() {
-  const raw = optionalEnv("AIRTABLE_AUTOMATIONS");
-  if (!raw) {
-    return null;
-  }
-
-  let parsed;
-  try {
-    parsed = JSON.parse(raw);
-  } catch (error) {
-    throw new Error(`Invalid AIRTABLE_AUTOMATIONS JSON: ${error.message}`);
-  }
+function parseAutomationConfigFile() {
+  const configPath = optionalEnv("AIRTABLE_CONFIG_PATH") || "config/airtable-automations.json";
+  const absolutePath = path.resolve(configPath);
+  const parsed = readJsonFile(absolutePath);
 
   if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
-    throw new Error("AIRTABLE_AUTOMATIONS must be a JSON object keyed by automation key.");
+    throw new Error(
+      `Config file ${absolutePath} must be a JSON object keyed by automation key.`
+    );
   }
 
-  return parsed;
+  const keys = Object.keys(parsed);
+  if (keys.length === 0) {
+    throw new Error(`Config file ${absolutePath} is empty.`);
+  }
+
+  return { configPath: absolutePath, configMap: parsed };
 }
 
 function resolveAirtableConfig(payload) {
@@ -97,91 +111,59 @@ function resolveAirtableConfig(payload) {
     throw new Error("Dispatch payload is missing required client_payload.recordId");
   }
 
+  const airtableToken = requireEnv("AIRTABLE_TOKEN");
   const tableFromPayload = nonEmptyString(payload && payload.tableName);
-  const configMap = parseAutomationConfigMap();
-  const defaultReleaseTag = optionalEnv("AIRTABLE_ICS_RELEASE_TAG") || "airtable-ics-assets";
+  const { configPath, configMap } = parseAutomationConfigFile();
+  const availableKeys = Object.keys(configMap);
+  const payloadAutomationKey = nonEmptyString(payload && payload.automationKey);
+  const automationKey = payloadAutomationKey || (availableKeys.length === 1 ? availableKeys[0] : "");
 
-  if (configMap) {
-    const availableKeys = Object.keys(configMap);
-    if (availableKeys.length === 0) {
-      throw new Error("AIRTABLE_AUTOMATIONS is set but empty.");
-    }
-
-    const payloadAutomationKey = nonEmptyString(payload && payload.automationKey);
-    const automationKey =
-      payloadAutomationKey || (availableKeys.length === 1 ? availableKeys[0] : "");
-
-    if (!automationKey) {
-      throw new Error(
-        `Multiple automation configs found (${availableKeys.join(
-          ", "
-        )}). Include client_payload.automationKey.`
-      );
-    }
-
-    const selected = configMap[automationKey];
-    if (!selected || typeof selected !== "object" || Array.isArray(selected)) {
-      throw new Error(`automationKey "${automationKey}" was not found in AIRTABLE_AUTOMATIONS.`);
-    }
-
-    const airtableToken = pickString(selected, ["token", "airtableToken"]) || optionalEnv("AIRTABLE_TOKEN");
-    const baseId = pickString(selected, ["baseId", "airtableBaseId"]);
-    const tableIdOrName =
-      tableFromPayload || pickString(selected, ["tableId", "tableName", "table"]);
-    const attachmentField = pickString(selected, ["icsField", "attachmentField", "airtableIcsField"]);
-    const updatedAtField = pickString(selected, [
-      "updatedAtField",
-      "airtableUpdatedAtField",
-    ]);
-    const releaseTag = pickString(selected, ["releaseTag"]) || defaultReleaseTag;
-
-    if (!airtableToken) {
-      throw new Error(`Missing token for automationKey "${automationKey}".`);
-    }
-    if (!baseId) {
-      throw new Error(`Missing baseId for automationKey "${automationKey}".`);
-    }
-    if (!tableIdOrName) {
-      throw new Error(
-        `Missing table in automationKey "${automationKey}". Add tableId/tableName or pass client_payload.tableName.`
-      );
-    }
-    if (!attachmentField) {
-      throw new Error(`Missing icsField in automationKey "${automationKey}".`);
-    }
-    if (!updatedAtField) {
-      throw new Error(`Missing updatedAtField in automationKey "${automationKey}".`);
-    }
-
-    return {
-      recordId,
-      automationKey,
-      airtableToken,
-      baseId,
-      tableIdOrName,
-      attachmentField,
-      updatedAtField,
-      releaseTag,
-    };
+  if (!automationKey) {
+    throw new Error(
+      `Multiple automation configs found in ${configPath} (${availableKeys.join(
+        ", "
+      )}). Include client_payload.automationKey.`
+    );
   }
 
-  const tableFromEnv = optionalEnv("AIRTABLE_TABLE_ID");
-  const tableIdOrName = tableFromPayload || tableFromEnv;
+  const selected = configMap[automationKey];
+  if (!selected || typeof selected !== "object" || Array.isArray(selected)) {
+    throw new Error(`automationKey "${automationKey}" was not found in ${configPath}.`);
+  }
+
+  const baseId = pickString(selected, ["baseId", "airtableBaseId"]);
+  const tableIdOrName = tableFromPayload || pickString(selected, ["tableId", "tableName", "table"]);
+  const attachmentField = pickString(selected, ["icsField", "attachmentField", "airtableIcsField"]);
+  const updatedAtField = pickString(selected, ["updatedAtField", "airtableUpdatedAtField"]);
+  const releaseTag = pickString(selected, ["releaseTag"]) || "airtable-ics-assets";
+
+  if (!baseId) {
+    throw new Error(`Missing baseId for automationKey "${automationKey}" in ${configPath}.`);
+  }
   if (!tableIdOrName) {
     throw new Error(
-      "No Airtable table provided. Set AIRTABLE_TABLE_ID or include client_payload.tableName."
+      `Missing table for automationKey "${automationKey}" in ${configPath}. Add tableId/tableName or pass client_payload.tableName.`
+    );
+  }
+  if (!attachmentField) {
+    throw new Error(`Missing icsField for automationKey "${automationKey}" in ${configPath}.`);
+  }
+  if (!updatedAtField) {
+    throw new Error(
+      `Missing updatedAtField for automationKey "${automationKey}" in ${configPath}.`
     );
   }
 
   return {
     recordId,
-    automationKey: nonEmptyString(payload && payload.automationKey),
-    airtableToken: requireEnv("AIRTABLE_TOKEN"),
-    baseId: requireEnv("AIRTABLE_BASE_ID"),
+    automationKey,
+    configPath,
+    airtableToken,
+    baseId,
     tableIdOrName,
-    attachmentField: requireEnv("AIRTABLE_ICS_FIELD"),
-    updatedAtField: requireEnv("AIRTABLE_UPDATED_AT_FIELD"),
-    releaseTag: defaultReleaseTag,
+    attachmentField,
+    updatedAtField,
+    releaseTag,
   };
 }
 
@@ -524,6 +506,7 @@ async function main() {
   const {
     recordId,
     automationKey,
+    configPath,
     airtableToken,
     baseId,
     tableIdOrName,
@@ -533,6 +516,7 @@ async function main() {
   } = config;
 
   console.log(`Event payload file: ${eventPath}`);
+  console.log(`Config file: ${configPath}`);
   console.log(`Processing Airtable record: ${recordId}`);
   if (automationKey) {
     console.log(`Automation key: ${automationKey}`);

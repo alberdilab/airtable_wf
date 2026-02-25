@@ -24,60 +24,48 @@ Use these field names in your table:
 - `ICS` (attachment field)
 - `ICS Updated At` (date/time)
 
-## Required GitHub secrets
+## Repository config file
 
-### Recommended (multiple automations)
+Non-secret Airtable settings now live in a repo JSON file:
+[config/airtable-automations.json](config/airtable-automations.json)
 
-Set one JSON secret named `AIRTABLE_AUTOMATIONS`, keyed by `automationKey`:
+Example:
 
 ```json
 {
   "events_eu": {
-    "token": "patXXXXXXXXXXXXXX",
     "baseId": "appXXXXXXXXXXXXXX",
     "tableId": "tblXXXXXXXXXXXXXX",
     "icsField": "ICS",
-    "updatedAtField": "ICS Updated At"
+    "updatedAtField": "ICS Updated At",
+    "releaseTag": "airtable-ics-assets-eu"
   },
   "events_us": {
-    "token": "patYYYYYYYYYYYYYY",
     "baseId": "appYYYYYYYYYYYYYY",
     "tableName": "Events",
     "icsField": "ICS",
-    "updatedAtField": "ICS Updated At",
-    "releaseTag": "airtable-ics-assets-us"
+    "updatedAtField": "ICS Updated At"
   }
 }
 ```
 
 Per-automation keys:
 
-- `token` (optional if you set global `AIRTABLE_TOKEN`)
 - `baseId` (required)
 - `tableId` or `tableName` (required unless passed in payload)
 - `icsField` (required)
 - `updatedAtField` (required)
-- `releaseTag` (optional)
+- `releaseTag` (optional, default: `airtable-ics-assets`)
 
-Then dispatch with:
+Dispatch payload:
 
 - `client_payload.recordId` (required)
-- `client_payload.automationKey` (required when more than one config exists)
+- `client_payload.automationKey` (required when config has multiple entries)
 - `client_payload.tableName` (optional override)
 
-### Backward-compatible (single automation)
-
-You can still use individual secrets:
+## Required GitHub secrets
 
 - `AIRTABLE_TOKEN` (Airtable PAT)
-- `AIRTABLE_BASE_ID` (e.g. `appXXXXXXXXXXXXXX`)
-- `AIRTABLE_TABLE_ID` (table ID like `tbl...` or table name)
-- `AIRTABLE_ICS_FIELD` (attachment field name, e.g. `ICS`)
-- `AIRTABLE_UPDATED_AT_FIELD` (e.g. `ICS Updated At`)
-
-Optional:
-
-- `AIRTABLE_ICS_RELEASE_TAG` (default: `airtable-ics-assets`)
 
 ## Attachment upload approach
 
@@ -148,13 +136,17 @@ if (!res.ok) {
 2. Run the script:
 
 ```bash
-export AIRTABLE_AUTOMATIONS='{"events_eu":{"token":"pat...","baseId":"app...","tableId":"tbl...","icsField":"ICS","updatedAtField":"ICS Updated At"}}'
+export AIRTABLE_TOKEN="pat..."
 export GITHUB_EVENT_PATH="$PWD/sample-event.json"
 
 node scripts/process-airtable-event.js
 ```
 
-Single-automation mode still works with the individual env vars above.
+Optional: use a non-default config file path:
+
+```bash
+export AIRTABLE_CONFIG_PATH="$PWD/config/airtable-automations.json"
+```
 
 You can also pass the event file as CLI arg:
 

@@ -1,0 +1,16 @@
+{
+  "ehi_events": {
+    "baseId": "app7iuOBWYTEUH7Ma",
+    "tableName": "Events",
+    "icsField": "ICS",
+    "updatedAtField": "ICS_update",
+    "releaseTag": "airtable-ics-assets_ehi"
+  },
+  "alberdilab_events": {
+    "baseId": "appllrMDEaqNYheLX",
+    "tableName": "Events",
+    "icsField": "ICS",
+    "updatedAtField": "ICS_update",
+    "releaseTag": "airtable-ics-assets_alberdilab"
+  }
+}
